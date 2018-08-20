@@ -365,53 +365,8 @@ Read in the data
 ``` r
 library(RColorBrewer)
 library(tidyverse)
-```
-
-    ## ── Attaching packages ──────────────────────────────────────────────────────────────── tidyverse 1.2.1 ──
-
-    ## ✔ ggplot2 3.0.0     ✔ purrr   0.2.5
-    ## ✔ tibble  1.4.2     ✔ dplyr   0.7.6
-    ## ✔ tidyr   0.8.1     ✔ stringr 1.3.1
-    ## ✔ readr   1.1.1     ✔ forcats 0.3.0
-
-    ## ── Conflicts ─────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
-    ## ✖ purrr::accumulate() masks foreach::accumulate()
-    ## ✖ ggplot2::annotate() masks NLP::annotate()
-    ## ✖ dplyr::combine()    masks randomForest::combine()
-    ## ✖ tidyr::expand()     masks Matrix::expand()
-    ## ✖ tidyr::extract()    masks magrittr::extract()
-    ## ✖ dplyr::filter()     masks stats::filter()
-    ## ✖ dplyr::lag()        masks stats::lag()
-    ## ✖ ggplot2::margin()   masks randomForest::margin()
-    ## ✖ purrr::set_names()  masks magrittr::set_names()
-    ## ✖ purrr::when()       masks foreach::when()
-
-``` r
 library(arules)  
-```
-
-    ## 
-    ## Attaching package: 'arules'
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     recode
-
-    ## The following object is masked from 'package:tm':
-    ## 
-    ##     inspect
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     abbreviate, write
-
-``` r
 library(arulesViz)
-```
-
-    ## Loading required package: grid
-
-``` r
 groceries <- read.transactions("/Users/yilezhou/Documents/GitHub/STA380-Assignment-2/groceries.txt", format = "basket", sep=",")
 basketSize<- size(groceries) 
 ```
@@ -464,7 +419,7 @@ groceryrules <- apriori(groceries, parameter = list(support = 0.006, confidence 
     ## Absolute minimum support count: 59 
     ## 
     ## set item appearances ...[0 item(s)] done [0.00s].
-    ## set transactions ...[169 item(s), 9835 transaction(s)] done [0.00s].
+    ## set transactions ...[169 item(s), 9835 transaction(s)] done [0.01s].
     ## sorting and recoding items ... [109 item(s)] done [0.00s].
     ## creating transaction tree ... done [0.00s].
     ## checking subsets of size 1 2 3 4 done [0.00s].
@@ -754,7 +709,7 @@ bagrules <- apriori(groceries, parameter = list(support = 0.0005, confidence = 0
     ## creating transaction tree ... done [0.00s].
     ## checking subsets of size 1 2 3 4 5 6 7 done [0.02s].
     ## writing ... [2263 rule(s)] done [0.00s].
-    ## creating S4 object  ... done [0.00s].
+    ## creating S4 object  ... done [0.01s].
 
 ``` r
 inspect(head(lhs(sort(bagrules, by = 'lift')), n=10))

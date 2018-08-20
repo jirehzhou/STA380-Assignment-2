@@ -288,7 +288,7 @@ rf_test_accuracy # test set accuracy of random forest: 6.08%
 # Associate rule mining
 
 Read in the data
-```{r}
+```{r, message = FALSE}
 library(RColorBrewer)
 library(tidyverse)
 library(arules)  
