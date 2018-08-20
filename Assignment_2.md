@@ -12,7 +12,7 @@ Group: Jinming Li, Rulan Pan, Tianxin Huang, Yile Zhou
 
 ``` r
 #Read the data
-abia = read.csv("/Users/yilezhou/Desktop/ABIA.csv")
+abia = read.csv("/Users/yilezhou/Documents/GitHub/STA380-Assignment-2/ABIA.csv")
 #Delay time for each month
 CD = c()  #CarrierDelay
 WD = c()  #WeatherDelay
@@ -116,18 +116,303 @@ the flights of Mesa Airlines. Instead, American Eagle, Southwest
 Airlines, Frontier and US Airways, these airline companies will make
 your life much better.
 
-# Associate rule mining
+# Author attribution
 
-## 1.Transaction overview
+The goal of our team is to accurately predict the author based on the
+text each author wrote. Given 2500 text files of each 50 author in the
+train set and another 2500 text files of each 50 author in the test set,
+I conducted the text mining and text analysis on the following order:
+
+Train set:<br/> 1) Read all train set txt files into plain term
+matrix<br/> 2) Converted 2500 train set documents of each 50 authors
+from plainTerm matrix into corpus<br/> 3) Created train set
+document-term matrix and remove spare terms<br/> 4) Built train set
+TF-IDF matrix and remove those columns with 0 sum<br/> 5) Conducted PCA
+on reducing the dimentiona of train set X variabels from 3327 to 341
+(number of PCs that explained 50% variance)<br/> 6) Read 2500 train set
+author labels and combined it with TF-IDF matrix<br/> 7) Cross-validated
+out the best lambda for logistic regression<br/> 8) Used the best lambda
+to fit the train set and got a logistic model.<br/> 9) Trained random
+forest on train set<br/>
+
+Test set:<br/> 10) Read all test set txt files into plain term
+matrix<br/> 11) Converted 2500 test set documents of each 50 authors
+from plainTerm matrix into corpus<br/> 12) Created test set
+document-term matrix and remove spare terms with controlled column names
+being the same as train set<br/> 13) Built test set TF-IDF matrix<br/>
+14) Read 2500 test set author labels and combined it with TF-IDF
+matrix<br/> 15) Used the logisitc model with best lambda in train set to
+predict test set data<br/> 16) Used the random forest in train set to
+predict test set data<br/>
+
+#### Result:
+
+Using logistic model, I achieved 81.88% accuracy under cross validation
+setting with lambda 1se chosen but only received 2.52% accuracy when
+predicting the test set. Using random forest, I achieved 81.96% accuracy
+but only received 6.08% accuracy when predicting the test set.
+
+#### Conclusion:
+
+The reason as for why we achieve high accuracy in train set data even
+with cross validation but low accuracy in test set data might be the
+fact that test set data is extremely different from the train set data.
+When we are trying to build model to predict test set based on train
+set, our assumption is that the data in test set would be pretty similar
+to the train set, so even if we didn’t see this piece of data in the
+train set, we can still predict more or less accurately to the test set.
+However, in this particular scenario, train set data is unfamiliar with
+test set data. For example, AaronPressman wrote two document a and b in
+the training set. The TF-IDF vector for a and b are similar (cosine
+similarity measurement), so when we do cross validation on train set, we
+are able to predict b accurately based on the information from a.
+However, in the test set, AaronPressman also wrote another document c
+which is very different from a and b. This is impossible to predict c
+based on a and b. Our assumption again is that train set data and test
+set data should more or less looks the same. If not, it is the same as
+saying go predicting an Asian child that is yours based on his apperance
+but you can only make judgement based on your two American kids, and no
+more\! Hard to make a prediction, right? Same as here.
+
+### Step 1: Read all train set txt files into plain term matrix
+
+``` r
+library(tm)
+library(glmnet)
+library(randomForest)
+library(magrittr)
+train_dir = dir('/Users/yilezhou/Documents/GitHub/STA380-Assignment-2/ReutersC50/C50train', full.names = TRUE)
+test_dir = dir('/Users/yilezhou/Documents/GitHub/STA380-Assignment-2/ReutersC50/C50test', full.names = TRUE)
+```
+
+``` r
+plaintable = function(filename){
+  readPlain(elem = list(content = readLines(filename)), 
+            id = NULL, language = 'en')
+}
+train50_plain = lapply(train_dir, dir, full.name = TRUE) %>% 
+  unlist %>%
+  lapply(., plaintable)
+```
+
+### Step 2: Converted 2500 train set documents of each 50 authors from plainTerm matrix into corpus
+
+``` r
+train50_corpus = Corpus(VectorSource(train50_plain))
+train50_corpus = tm_map(train50_corpus, content_transformer(tolower))
+train50_corpus = tm_map(train50_corpus, content_transformer(removeNumbers))
+train50_corpus = tm_map(train50_corpus, content_transformer(removePunctuation))
+train50_corpus = tm_map(train50_corpus, content_transformer(stripWhitespace))
+train50_corpus = tm_map(train50_corpus, content_transformer(removeWords), stopwords('en'))
+```
+
+### Step 3: Created train set document-term matrix and remove spare terms
+
+``` r
+train50_dtm = DocumentTermMatrix(train50_corpus)
+train50_dtm = removeSparseTerms(train50_dtm, 0.99)
+train50_dtm # reduce the number of terms from 32574 to 3344
+```
+
+    ## <<DocumentTermMatrix (documents: 2500, terms: 3344)>>
+    ## Non-/sparse entries: 422971/7937029
+    ## Sparsity           : 95%
+    ## Maximal term length: 20
+    ## Weighting          : term frequency (tf)
+
+### Step 4: Built train set TF-IDF matrix and remove those columns with 0 sum
+
+``` r
+train50_tfidf = weightTfIdf(train50_dtm)
+train50_tfidf = as.matrix(train50_tfidf)
+zerocol = which(colSums(train50_tfidf) == 0)
+train50_tfidf = train50_tfidf[, -zerocol] # dim: 2500 by 3327
+```
+
+### Step 5: Conducted PCA on reducing the dimentiona of train set X variabels from 3327 to 341 (number of PCs that explained 50% variance)
+
+``` r
+train50_pca = prcomp(train50_tfidf, scale. = TRUE)
+
+### Find the minimum PC with cumulative variance greater that 0.6 ###
+variance_frac = (train50_pca$sdev)^2 / sum((train50_pca$sdev)^2)
+minindex = which(cumsum(variance_frac) >= 0.5)[1]
+minindex # 341 PCs that together explained 50% of the variance
+```
+
+    ## [1] 341
+
+### Step 6: Read 2500 train set author labels and combined it with TF-IDF matrix
+
+``` r
+trainX = train50_pca$x[, 1:minindex]
+getLabel = function(filename){
+  times = length(dir(filename))
+  name = strsplit(filename, '/', fixed = TRUE) %>%
+    unlist %>%
+    tail(., 1)
+  result = rep(name, times)
+  return(result)
+}
+trainY = lapply(train_dir, getLabel) %>%
+  unlist
+```
+
+### Step: 7: Cross-validated out the best lambda for logistic regression
+
+``` r
+set.seed(999)
+cv_logistic = cv.glmnet(trainX, trainY, family = 'multinomial', type.measure = 'class')
+lambda_1se = cv_logistic$lambda.1se                 # lambda.1se = 0.00115
+cv_logistic$cvm[cv_logistic$lambda == lambda_1se]   # misclassification rate: 18.12%, accuracy =  81.88%
+```
+
+    ## [1] 0.1812
+
+``` r
+plot(log(cv_logistic$lambda), cv_logistic$cvm, col = 'blue', xlab = 'log(lambda)', ylab = 'CVM', cex = 1.2)
+abline(v = log(lambda_1se), lwd = 2, col = 'red')
+text(log(lambda_1se), 0.8, labels = paste('lambda 1se:', round(lambda_1se, 6)), font = 2, cex = 1.5)
+```
+
+![](Assignment_2_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+### Step: 8: Used the best lambda to fit the train set and got a logistic model
+
+``` r
+train_logistic = glmnet(trainX, trainY, family = 'multinomial', lambda = lambda_1se, type.multinomial = 'grouped')
+```
+
+### Step 9: Trained random forest on train set
+
+``` r
+rf_train = randomForest(trainX, as.factor(trainY), ntree = 3000)
+rf_train_insample_oob = predict(rf_train)
+rf_train_confusion = table(rf_train_insample_oob, trainY)
+rf_train_accuracy = sum(diag(rf_train_confusion)) / sum(rf_train_confusion)
+rf_train_accuracy # training set accuracy of random forest: 81.96%
+```
+
+    ## [1] 0.8196
+
+### Step 10: Read all test set txt files into plain term matrix
+
+``` r
+test50_plain = lapply(test_dir, dir, full.name = TRUE) %>% 
+  unlist %>%
+  lapply(., plaintable)
+```
+
+### Step 11: Converted 2500 test set documents of each 50 authors from plainTerm matrix into corpus
+
+``` r
+test50_corpus = Corpus(VectorSource(test50_plain))
+test50_corpus = tm_map(test50_corpus, content_transformer(tolower))
+test50_corpus = tm_map(test50_corpus, content_transformer(removeNumbers))
+test50_corpus = tm_map(test50_corpus, content_transformer(removePunctuation))
+test50_corpus = tm_map(test50_corpus, content_transformer(stripWhitespace))
+test50_corpus = tm_map(test50_corpus, content_transformer(removeWords), stopwords('en'))
+```
+
+### Step 12: Created test set document-term matrix and remove spare terms with controlled column names being the same as train set
+
+``` r
+test50_dtm = DocumentTermMatrix(test50_corpus, control = list(dictionary = colnames(train50_tfidf)))
+```
+
+### Step 13: Built test set TF-IDF matrix
+
+``` r
+test50_tfidf = weightTfIdf(test50_dtm)
+test50_tfidf = as.matrix(test50_tfidf)
+```
+
+### Step 14: Read 2500 test set author labels and combined it with TF-IDF matrix
+
+``` r
+test50_pca = prcomp(test50_tfidf, scale. = TRUE)
+testX = test50_pca$x[, 1:minindex]
+testY = lapply(test_dir, getLabel) %>%
+  unlist
+```
+
+### Step 15: Used the logisitc model with best lambda in train set to predict test set data
+
+``` r
+logistic_pred = predict(train_logistic, testX, type = 'class')
+logistic_confusion = table(logistic_pred, testY)
+logistic_accuracy = sum(diag(logistic_confusion)) / sum(logistic_confusion)
+logistic_accuracy # only 2.52%, 63 out of 2500 correct times
+```
+
+    ## [1] 0.0252
+
+### Step 16: Used the random forest in train set to predict test set data
+
+``` r
+rf_test = predict(rf_train, testX)
+rf_test_confusion = table(rf_test, testY)
+rf_test_accuracy = sum(diag(rf_test_confusion)) / sum(rf_test_confusion)
+rf_test_accuracy # test set accuracy of random forest: 6.08%
+```
+
+    ## [1] 0.0608
+
+# Associate rule mining
 
 Read in the data
 
 ``` r
 library(RColorBrewer)
 library(tidyverse)
+```
+
+    ## ── Attaching packages ──────────────────────────────────────────────────────────────── tidyverse 1.2.1 ──
+
+    ## ✔ ggplot2 3.0.0     ✔ purrr   0.2.5
+    ## ✔ tibble  1.4.2     ✔ dplyr   0.7.6
+    ## ✔ tidyr   0.8.1     ✔ stringr 1.3.1
+    ## ✔ readr   1.1.1     ✔ forcats 0.3.0
+
+    ## ── Conflicts ─────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ✖ purrr::accumulate() masks foreach::accumulate()
+    ## ✖ ggplot2::annotate() masks NLP::annotate()
+    ## ✖ dplyr::combine()    masks randomForest::combine()
+    ## ✖ tidyr::expand()     masks Matrix::expand()
+    ## ✖ tidyr::extract()    masks magrittr::extract()
+    ## ✖ dplyr::filter()     masks stats::filter()
+    ## ✖ dplyr::lag()        masks stats::lag()
+    ## ✖ ggplot2::margin()   masks randomForest::margin()
+    ## ✖ purrr::set_names()  masks magrittr::set_names()
+    ## ✖ purrr::when()       masks foreach::when()
+
+``` r
 library(arules)  
+```
+
+    ## 
+    ## Attaching package: 'arules'
+
+    ## The following object is masked from 'package:dplyr':
+    ## 
+    ##     recode
+
+    ## The following object is masked from 'package:tm':
+    ## 
+    ##     inspect
+
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     abbreviate, write
+
+``` r
 library(arulesViz)
-groceries <- read.transactions("groceries.txt", format = "basket", sep=",")
+```
+
+    ## Loading required package: grid
+
+``` r
+groceries <- read.transactions("/Users/yilezhou/Documents/GitHub/STA380-Assignment-2/groceries.txt", format = "basket", sep=",")
 basketSize<- size(groceries) 
 ```
 
@@ -153,7 +438,7 @@ set to be 0.08.
 itemFrequencyPlot(groceries, topN=10, horiz=T,support=0.08)
 ```
 
-![](Assignment_2_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](Assignment_2_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ## 3\. Rules
 
@@ -368,7 +653,7 @@ rolls/buns, cream cheese, baking powder, beef, and pastry. 2. Other
 vegetables are frequently bought with root vegetables, tropical fruit,
 whole milk, fruit/vegetable juice, and frozen vegetables.
 
-## 4.The most frequently bought item– whole milk
+## 4.Breakfast combo
 
 Milk is the most frequent item in transactions. Therefore, we are
 curious about what else people will buy along with milk. The result is
@@ -376,7 +661,7 @@ shown as
 follows.
 
 ``` r
-milkrules <- apriori(groceries, parameter = list(support = 0.001, confidence = 0.05, minlen = 2),
+milkrules <- apriori(groceries, parameter = list(support = 0.0005, confidence = 0.05, minlen = 2),
                                                     appearance = list(lhs=c('whole milk'), default = 'rhs'))
 ```
 
@@ -384,7 +669,7 @@ milkrules <- apriori(groceries, parameter = list(support = 0.001, confidence = 0
     ## 
     ## Parameter specification:
     ##  confidence minval smax arem  aval originalSupport maxtime support minlen
-    ##        0.05    0.1    1 none FALSE            TRUE       5   0.001      2
+    ##        0.05    0.1    1 none FALSE            TRUE       5   5e-04      2
     ##  maxlen target   ext
     ##      10  rules FALSE
     ## 
@@ -392,42 +677,15 @@ milkrules <- apriori(groceries, parameter = list(support = 0.001, confidence = 0
     ##  filter tree heap memopt load sort verbose
     ##     0.1 TRUE TRUE  FALSE TRUE    2    TRUE
     ## 
-    ## Absolute minimum support count: 9 
+    ## Absolute minimum support count: 4 
     ## 
     ## set item appearances ...[1 item(s)] done [0.00s].
     ## set transactions ...[169 item(s), 9835 transaction(s)] done [0.00s].
-    ## sorting and recoding items ... [157 item(s)] done [0.00s].
+    ## sorting and recoding items ... [164 item(s)] done [0.00s].
     ## creating transaction tree ... done [0.00s].
     ## checking subsets of size 1 2 done [0.00s].
     ## writing ... [36 rule(s)] done [0.00s].
     ## creating S4 object  ... done [0.00s].
-
-``` r
-inspect(milkrules[1:10])
-```
-
-    ##      lhs             rhs                        support    confidence
-    ## [1]  {whole milk} => {hamburger meat}           0.01474326 0.05769996
-    ## [2]  {whole milk} => {hygiene articles}         0.01281139 0.05013928
-    ## [3]  {whole milk} => {sugar}                    0.01504830 0.05889375
-    ## [4]  {whole milk} => {long life bakery product} 0.01352313 0.05292479
-    ## [5]  {whole milk} => {dessert}                  0.01372649 0.05372065
-    ## [6]  {whole milk} => {cream cheese}             0.01647178 0.06446478
-    ## [7]  {whole milk} => {chicken}                  0.01759024 0.06884202
-    ## [8]  {whole milk} => {white bread}              0.01708185 0.06685237
-    ## [9]  {whole milk} => {chocolate}                0.01667514 0.06526064
-    ## [10] {whole milk} => {coffee}                   0.01870869 0.07321926
-    ##      lift     count
-    ## [1]  1.735410 145  
-    ## [2]  1.521975 126  
-    ## [3]  1.739400 148  
-    ## [4]  1.414444 133  
-    ## [5]  1.447514 135  
-    ## [6]  1.625670 162  
-    ## [7]  1.604411 173  
-    ## [8]  1.588147 168  
-    ## [9]  1.315243 164  
-    ## [10] 1.261141 184
 
 We rank the rules by lift.
 
@@ -456,7 +714,7 @@ milk, egg, butter and curd.
 plot(head(milkrules, 20, by='lift'), method='graph')
 ```
 
-![](Assignment_2_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](Assignment_2_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 From the graph we know that the most frequent items bought with whole
 milk is other vegetables. However, items with strong lift are butter,
@@ -464,3 +722,112 @@ domestic eggs, and curd, which means that customer would like to buy
 whole milk and those three together. This is an example showing how we
 can use associate rule mining to help supermarkets make marketing
 decisions.
+
+## 5.The heavy and the large
+
+Shoping bags are among the most frequent items. We would like to know
+who are going to buy shopping
+bags.
+
+``` r
+bagrules <- apriori(groceries, parameter = list(support = 0.0005, confidence = 0.05, minlen = 2),
+                                                    appearance = list(rhs=c('shopping bags'), default = 'lhs'))
+```
+
+    ## Apriori
+    ## 
+    ## Parameter specification:
+    ##  confidence minval smax arem  aval originalSupport maxtime support minlen
+    ##        0.05    0.1    1 none FALSE            TRUE       5   5e-04      2
+    ##  maxlen target   ext
+    ##      10  rules FALSE
+    ## 
+    ## Algorithmic control:
+    ##  filter tree heap memopt load sort verbose
+    ##     0.1 TRUE TRUE  FALSE TRUE    2    TRUE
+    ## 
+    ## Absolute minimum support count: 4 
+    ## 
+    ## set item appearances ...[1 item(s)] done [0.00s].
+    ## set transactions ...[169 item(s), 9835 transaction(s)] done [0.00s].
+    ## sorting and recoding items ... [164 item(s)] done [0.00s].
+    ## creating transaction tree ... done [0.00s].
+    ## checking subsets of size 1 2 3 4 5 6 7 done [0.02s].
+    ## writing ... [2263 rule(s)] done [0.00s].
+    ## creating S4 object  ... done [0.00s].
+
+``` r
+inspect(head(lhs(sort(bagrules, by = 'lift')), n=10))
+```
+
+    ##      items                                            
+    ## [1]  {brown bread,pastry,soft cheese}                 
+    ## [2]  {candy,canned beer,citrus fruit}                 
+    ## [3]  {bottled water,ham,white bread}                  
+    ## [4]  {frankfurter,pip fruit,rolls/buns,tropical fruit}
+    ## [5]  {citrus fruit,popcorn}                           
+    ## [6]  {fruit/vegetable juice,red/blush wine,whole milk}
+    ## [7]  {canned fish,other vegetables,soda}              
+    ## [8]  {canned beer,domestic eggs,rolls/buns}           
+    ## [9]  {cake bar,semi-finished bread}                   
+    ## [10] {pastry,salty snack,whipped/sour cream}
+
+Based on the result, we find that customers would like to have shopping
+bags when they buy heavy items like canned beer and fruits, and large
+items like bread. Supermarkets could put shopping bags near these
+hard-to-carry items to promote their sales.
+
+``` r
+plot(head(bagrules, 20, by='lift'), method='graph')
+```
+
+![](Assignment_2_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+
+## 6.Mischievous cats
+
+When we are obersaving people who buy hygiene articles, we find these
+cutomers are likely to be cat
+owners.
+
+``` r
+hrules <- apriori(groceries, parameter = list(support = 0.0005, confidence = 0.05, minlen = 2),
+                                                    appearance = list(lhs=c('hygiene articles'), default = 'rhs'))
+```
+
+    ## Apriori
+    ## 
+    ## Parameter specification:
+    ##  confidence minval smax arem  aval originalSupport maxtime support minlen
+    ##        0.05    0.1    1 none FALSE            TRUE       5   5e-04      2
+    ##  maxlen target   ext
+    ##      10  rules FALSE
+    ## 
+    ## Algorithmic control:
+    ##  filter tree heap memopt load sort verbose
+    ##     0.1 TRUE TRUE  FALSE TRUE    2    TRUE
+    ## 
+    ## Absolute minimum support count: 4 
+    ## 
+    ## set item appearances ...[1 item(s)] done [0.00s].
+    ## set transactions ...[169 item(s), 9835 transaction(s)] done [0.00s].
+    ## sorting and recoding items ... [164 item(s)] done [0.00s].
+    ## creating transaction tree ... done [0.00s].
+    ## checking subsets of size 1 2 done [0.00s].
+    ## writing ... [42 rule(s)] done [0.00s].
+    ## creating S4 object  ... done [0.00s].
+
+``` r
+inspect(head(rhs(sort(hrules, by = 'lift')), n=10))
+```
+
+    ##      items           
+    ## [1]  {napkins}       
+    ## [2]  {oil}           
+    ## [3]  {cat food}      
+    ## [4]  {butter}        
+    ## [5]  {sugar}         
+    ## [6]  {hamburger meat}
+    ## [7]  {domestic eggs} 
+    ## [8]  {curd}          
+    ## [9]  {margarine}     
+    ## [10] {onions}
