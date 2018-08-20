@@ -1,0 +1,169 @@
+---
+title: "R assignment 2"
+date: "8/20/2018"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+STA 380, Part 2: Exercises 2
+
+Group: Jinming Li, Rulan Pan, Tianxin Huang, Yile Zhou
+
+# Flights at ABIA
+
+## The Worst Month for Flight Delays
+```{r}
+#Read the data
+abia = read.csv("/Users/yilezhou/Desktop/ABIA.csv")
+#Delay time for each month
+CD = c()  #CarrierDelay
+WD = c()  #WeatherDelay
+ND = c()  #NASDelay
+SD = c()  #SecurityDelay
+LAD = c() #LateAircraftDelay
+for(month in 1:12){
+  df_temp = abia[which(abia$Month == month & abia$Origin == "AUS"), ]
+  CD = c(CD, sum(df_temp$CarrierDelay, na.rm = TRUE)/nrow(df_temp))
+  WD = c(WD, sum(df_temp$WeatherDelay, na.rm = TRUE)/nrow(df_temp))
+  ND = c(ND, sum(df_temp$NASDelay, na.rm = TRUE)/nrow(df_temp))
+  SD = c(SD, sum(df_temp$SecurityDelay, na.rm = TRUE)/nrow(df_temp))
+  LAD = c(LAD,sum(df_temp$LateAircraftDelay, na.rm = TRUE)/nrow(df_temp))
+}
+df = data.frame(CarrierDelay = CD,
+                WeatherDelay = WD,
+                NASDelay = ND,
+                SecurityDelay = SD,
+                LateAircraftDelay =LAD,
+                Sum = (CD + WD +ND +SD +LAD))
+```
+
+```{r}
+matplot(df[,1:5], type = "b", pch=1, col = 1:5, xlab = "Month", 
+        ylab = "Delay Time", main = "Delay Time by Different Reasons")
+legend(8.5,7.5, c("CD", "WD", "ND", "SD", "LAD"), col=1:5, pch=1)
+```
+
+From the graph above, we could see LateAircraft delay plays a big role in most months, especially in March and December. The Weather delay is not a big problem in Austin, but it is a much bigger factor of flight delay in March than other months. 
+
+```{r}
+plot(df[,6], type = "b", ylim=c(1, 14), xlab = "Month", 
+     ylab = "Average Delay Time", main = "Average Delay Time in Months")
+```
+
+From the average delay time through the year, we could see December, March, and June are the top three longest flight delay months. And, September, October and November are the three best months for flight in Austin. 
+
+## The Days in a Week
+```{r}
+delay = c()
+for(day in 1:7){
+  df_temp = abia[which(abia$DayOfWeek == day & abia$Origin == "AUS"), ]
+  delay = c(delay, sum(df_temp$ArrDelay, na.rm = TRUE)/nrow(df_temp))
+}
+plot(delay, type = "b", ylim=c(1, 8), xlab = "Day in a Week", 
+     ylab = "Average Delay Time", main = "Average Delay Time in Days")
+```
+
+Friday is the worst day in a week, following by Monday. However, Wednesday and Saturday are the two of the best days in a week for flight in Austin. 
+
+## The Worst Carrier
+```{r}
+DelayData = abia[which(abia$ArrDelay > 0), ]
+carriers = unique(DelayData$UniqueCarrier)
+meanCarrierDelay = c()
+for(x in carriers){
+  df_temp = DelayData[which(DelayData$UniqueCarrier == x), ]
+  meanCarrier = mean(df_temp$CarrierDelay, na.rm = TRUE)
+  meanCarrierDelay = c(meanCarrierDelay, meanCarrier)
+}
+meanCarrierDelay
+idx = which.max(meanCarrierDelay)
+WorstCarrier = carriers[idx]
+plot(carriers, meanCarrierDelay, type = "p", ylab = "Average Delay Minutes by Carrier", las =2)
+points(WorstCarrier, max(meanCarrierDelay), type = "o", col = "red", cex = 3)
+```
+
+YV, Mesa Airlines, is the worst Carrier in carrier delay for the year 2008 in Austin airport.  
+
+In conclusion, we recommand people take flight in September, October, and November through the year, and take flight on Wednesday, Saturday. However, if you must take a flight in busy days (Monday and Friday) or in busy months (March, June and December), we recommand you don't take the flights of Mesa Airlines. Instead, American Eagle, Southwest Airlines, Frontier and US Airways, these airline companies will make your life much better. 
+
+# Associate rule mining
+
+## 1.Transaction overview
+Read in the data
+```{r, message=FALSE}
+library(RColorBrewer)
+library(tidyverse)
+library(arules)  
+library(arulesViz)
+groceries <- read.transactions("groceries.txt", format = "basket", sep=",")
+basketSize<- size(groceries) 
+```
+
+There are 9853 transactions in the data set， 169 items included.
+
+Select the rows that include more than 2 items. 
+```{r}
+groceries_use <- groceries[basketSize > 2]
+groceries_use
+```
+
+## 2. Frequent items
+
+Plot the top 10 items that are most frequently bought. Support rate is set to be 0.08. 
+```{r}
+itemFrequencyPlot(groceries, topN=10, horiz=T,support=0.08)
+```
+
+## 3. Rules
+Use apriori rule to find all the rules associated with the dataset. 
+```{r}
+groceryrules <- apriori(groceries, parameter = list(support = 0.006, confidence = 0.25, minlen = 2)) 
+```
+
+We sort the rules by lift and inspect the top 20 rules.
+```{r}
+ordered_groceryrules <- sort(groceryrules, by="lift")
+inspect(ordered_groceryrules[1:20])
+```
+
+Ranked by lift, the top 20 baskets have lift values over around 3.02, which means that the items of lhs are pretty much associated with the items of rhs. Among these 20 rules, we summarize the following findings that we regard as interesting. 
+1. Root vegetables are usually bought with herbs, other vegetables, fruit, whole milk, beef, yogurt, rolls/buns.
+2. Whipped/sour cream are usually bought with berries, tropical fruit, and yogurt. 
+3. All kinds of vegetables and fruits are usually bought together.
+4. Sliced cheese is usally bought with sausage. 
+
+Then, we sort the rules by Confidence and inspect the top 50 rules.
+```{r}
+ordered_groceryrules <- sort(groceryrules, by="confidence")
+inspect(ordered_groceryrules[1:50])
+```
+
+Ranked by confidence, the top 50 baskets have confidence values over around 0.52, which means that over 52% of the times a customer buys the items of lhs, the items of rhs are bought as well. Among these 50 rules, we summarize the following findings that we regard as interesting. 
+1. Whole milk is frequently bought with butter, whipped/sour cream, yogurt, all kinds of vegetables and fruit, curd, eggs, sugar, margarine, rolls/buns, cream cheese, baking powder, beef, and pastry.
+2. Other vegetables are frequently bought with root vegetables, tropical fruit, whole milk, fruit/vegetable juice, and frozen vegetables.
+
+## 4.The most frequently bought item-- whole milk
+Milk is the most frequent item in transactions. Therefore, we are curious about what else people will buy along with milk. The result is shown as follows. 
+```{r}
+milkrules <- apriori(groceries, parameter = list(support = 0.001, confidence = 0.05, minlen = 2),
+                                                    appearance = list(lhs=c('whole milk'), default = 'rhs'))
+
+inspect(milkrules[1:10])
+```
+
+We rank the rules by lift.
+```{r}
+inspect(head(rhs(sort(milkrules, by = 'lift')), n=10))
+```
+
+Based on the result, we find that customers are likely to buy butter, curd, and eggs together with whole milk.They are good for breakfast. For supermarket, it is a good idea to promote a breakfast combo containing milk, egg, butter and curd.
+
+```{r}
+plot(head(milkrules, 20, by='lift'), method='graph')
+```
+
+From the graph we know that the most frequent items bought with whole milk is other vegetables. However, items with strong lift are butter, domestic eggs, and curd, which means that customer would like to buy whole milk and those three together. 
+This is an example showing how we can use associate rule mining to help supermarkets make marketing decisions. 
